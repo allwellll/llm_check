@@ -60,6 +60,33 @@
         color: var(--accent);
       }
 
+      .step {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 0.98rem;
+      }
+
+      .reasoning {
+        color: var(--muted);
+      }
+
+      .history {
+        display: grid;
+        gap: 10px;
+      }
+
+      details {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 10px 12px;
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      summary {
+        cursor: pointer;
+        color: var(--text);
+      }
+
       .results {
         display: grid;
         gap: 12px;
@@ -111,7 +138,22 @@
       <section class="panel">
         <h2>总览</h2>
         <div id="summary" class="summary">等待任务启动...</div>
+        <div id="step" class="step">当前阶段: 等待任务启动</div>
         <div id="job-error" class="err"></div>
+      </section>
+
+      <section class="panel">
+        <h2>当前题 Reasoning / CLI Events</h2>
+        <div id="reasoning-problem" class="reasoning">当前题: 等待开始</div>
+        <div id="reasoning-current" class="reasoning">暂无 reasoning 数据</div>
+        <pre id="reasoning-events">等待 reasoning 事件...</pre>
+      </section>
+
+      <section class="panel">
+        <h2>历史题 Reasoning</h2>
+        <div id="reasoning-history" class="history">
+          <div class="muted">暂无历史题 reasoning</div>
+        </div>
       </section>
 
       <section class="panel">
@@ -150,12 +192,55 @@
         `;
       }
 
+      function formatStep(data) {
+        const step = data.current_step || "等待任务启动";
+        if (!data.current_step_started_at) {
+          return `当前阶段: ${step}`;
+        }
+        const elapsed = Math.max(0, Math.floor(Date.now() / 1000 - data.current_step_started_at));
+        return `当前阶段: ${step}，已等待 ${elapsed}s`;
+      }
+
+      function problemLabel(data, problemId) {
+        const titles = data.problem_titles || {};
+        const title = titles[String(problemId)] || "";
+        return title ? `题目 ${problemId} · ${title}` : `题目 ${problemId}`;
+      }
+
+      function renderReasoningHistory(data) {
+        const currentProblemId = data.current_problem_id == null ? null : String(data.current_problem_id);
+        const entries = Object.entries(data.problem_reasoning || {})
+          .filter(([problemId, events]) => problemId !== currentProblemId && Array.isArray(events) && events.length)
+          .reverse();
+
+        if (!entries.length) {
+          return "<div class='muted'>暂无历史题 reasoning</div>";
+        }
+
+        return entries.map(([problemId, events]) => `
+          <details>
+            <summary>${escapeHtml(problemLabel(data, problemId))}</summary>
+            <pre>${escapeHtml(events.join("\\n\\n"))}</pre>
+          </details>
+        `).join("");
+      }
+
       async function refresh() {
         const response = await fetch(`/api/jobs/${jobId}`);
         const data = await response.json();
 
         document.getElementById("job-status").textContent = data.status;
         document.getElementById("job-error").textContent = data.error || "";
+        document.getElementById("step").textContent = formatStep(data);
+        document.getElementById("reasoning-problem").textContent =
+          data.current_problem_id == null
+            ? "当前题: 等待开始"
+            : `当前题: ${problemLabel(data, data.current_problem_id)}`;
+        document.getElementById("reasoning-current").textContent =
+          data.current_reasoning || "暂无 reasoning 数据";
+        document.getElementById("reasoning-events").textContent =
+          (data.reasoning_events || []).join("\n\n") || "等待 reasoning 事件...";
+        document.getElementById("reasoning-history").innerHTML = renderReasoningHistory(data);
 
         if (data.summary && data.summary.total) {
           document.getElementById("summary").textContent =
