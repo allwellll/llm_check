@@ -21,14 +21,14 @@ from fastapi.templating import Jinja2Templates
 
 BASE_DIR = Path(__file__).resolve().parent
 TEMPLATES = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-DEFAULT_PROBLEMS = [3743, 3501, 3486, 3435, 3389]
+DEFAULT_PROBLEMS = [3757, 3661, 3563]
 LEETCODE_CLI_VERSION = "0.4.3"
 DEFAULT_THINKING_EFFORT = "high"
 MODEL_CONNECT_TIMEOUT = 10
 MODEL_READ_TIMEOUT = 45
 MODEL_STREAM_MAX_SECONDS = 120
 CODEX_EXEC_IDLE_TIMEOUT = 300
-CODEX_EXEC_MAX_SECONDS = 1800
+CODEX_EXEC_MAX_SECONDS = 720
 INSTALL_LOCK = threading.Lock()
 JOBS_LOCK = threading.Lock()
 JOBS: dict[str, "JobState"] = {}
@@ -326,6 +326,7 @@ def normalize_endpoint(api_url: str, api_type: str) -> str:
 def normalize_api_type(api_type: str) -> str:
     value = api_type.strip().lower()
     aliases = {
+        "codex": "responses",
         "responseapi": "responses",
         "response_api": "responses",
         "responsesapi": "responses",
@@ -734,7 +735,7 @@ def call_model_with_codex_cli(
 ) -> str:
     codex_cli = resolve_codex_cli()
     if not codex_cli:
-        raise RuntimeError("未找到 codex CLI，无法通过 codex exec 调用 responses 模型。")
+        raise RuntimeError("未找到 codex CLI，无法通过 codex exec 调用 codex 模式。")
 
     codex_parent = home / "codex-runtime"
     codex_parent.mkdir(parents=True, exist_ok=True)
@@ -798,6 +799,8 @@ def call_model_with_codex_cli(
 
                 raw_line = process.stdout.readline()
                 if raw_line == "":
+                    if process.poll() is not None:
+                        break
                     continue
                 last_output_at = time.time()
                 line = raw_line.strip()
@@ -889,7 +892,9 @@ def call_model(
     }
     system_prompt = (
         "You solve LeetCode problems. Return only the final source code file. "
-        "Do not include markdown fences or explanations."
+        "Do not include markdown fences or explanations. Work under a hard 5-minute "
+        "deadline. Do not run broad or exhaustive tests; if you verify anything, use "
+        "only one or two tiny hand-crafted examples."
     )
 
     attempts: list[tuple[str, dict[str, Any]]] = []
@@ -945,6 +950,9 @@ Requirements:
 - Keep the LeetCode class name and method signatures valid.
 - Add any imports your solution needs.
 - Optimize for correctness first, and respect the problem constraints.
+- Work under a hard 5-minute deadline and return the final code as soon as the solution is sound.
+- Do not run large, exhaustive, randomized, or stress-test style validations.
+- If you verify the logic, use only one or two tiny hand-crafted examples.
 - Do not include markdown, explanations, or extra text.
 
 Starter file:
@@ -970,6 +978,13 @@ def parse_runtime_and_memory(output: str) -> tuple[str, str]:
     return runtime, memory
 
 
+def leetcode_command_failed(run: subprocess.CompletedProcess[str]) -> bool:
+    combined = ((run.stdout or "") + "\n" + (run.stderr or "")).lower()
+    if run.returncode != 0:
+        return True
+    return "error:" in combined
+
+
 def find_single_code_file(home: Path, language: str) -> Path:
     suffix = ".py" if language in {"python", "python3"} else ""
     code_dir = home / ".leetcode" / "code"
@@ -992,10 +1007,10 @@ def run_leetcode_command(
 
 def ensure_problem_cache(job: JobState, home: Path) -> None:
     result = run_leetcode_command(home, ["data", "--update"], timeout=1800)
-    if result.returncode != 0:
+    if leetcode_command_failed(result):
         raise RuntimeError(
             "LeetCode 题库缓存更新失败:\n"
-            f"{clip_text(result.stderr or result.stdout, 4000)}"
+            f"{clip_text((result.stdout or '') + (result.stderr or ''), 4000)}"
         )
     job.log("LeetCode 题库缓存已更新。")
 
@@ -1163,7 +1178,7 @@ async def create_job(request: Request) -> JSONResponse:
     payload = await request.json()
     api_type = normalize_api_type(payload.get("api_type", ""))
     if api_type not in {"chat_completion", "responses"}:
-        raise HTTPException(status_code=400, detail="api_type 仅支持 chat_completion 或 responses")
+        raise HTTPException(status_code=400, detail="api_type 仅支持 chat_completion 或 codex")
     payload["api_type"] = api_type
 
     job = JobState(job_id=uuid.uuid4().hex[:12])

@@ -1,5 +1,7 @@
 # LLM LeetCode Benchmark
 
+使用 LeetCode 最新题目，测试 LLM 代码水平。
+
 在 `1024` 端口启动一个网页服务，输入模型配置和 LeetCode Cookie 后，服务会：
 
 1. 自动检查并安装 `leetcode-cli`
@@ -24,18 +26,19 @@ uvicorn app:app --host 0.0.0.0 --port 1024
 
 ## 工作方式
 
-- 默认测试题目：`3743,3501,3486,3435,3389`
+- 默认使用较新的 LeetCode 题目做基准测试，当前默认题目：`3757,3661,3563`
 - 支持的模型接口类型：
   - `chat_completion`
-  - `responses`
-- `responses` 类型默认通过 `codex exec` 调用模型，不直接在服务内手写 `POST /responses`
+  - `codex`
+- `codex` 类型默认通过 `codex exec` 调用模型，不直接在服务内手写 `POST /responses`
 - `chat_completion` 类型仍然使用普通 HTTP 请求
 - 模型请求默认使用 `thinking effort = high`
 - 首次运行如果机器没有 Rust / `leetcode-cli`，会自动安装兼容版 `leetcode-cli v0.4.3`
+- 题目执行流程为：`leetcode edit -> 模型生成代码 -> leetcode test -> leetcode exec`
 
-## Responses 模式
+## Codex 模式
 
-当网页里选择 `api_type = responses` 时，服务会：
+当网页里选择 `api_type = codex` 时，服务会：
 
 1. 在当前任务目录下创建一个带时间戳的临时 `HOME`
 2. 复制 `/root/.codex` 的基础配置到临时 `HOME/.codex`
@@ -47,7 +50,7 @@ uvicorn app:app --host 0.0.0.0 --port 1024
 
 这样做的目的是：
 
-- 让 `responses` 模式和 Codex CLI 的真实调用方式保持一致
+- 让 `codex` 模式和 Codex CLI 的真实调用方式保持一致
 - 能在网页上看到实时的 CLI / reasoning 输出
 - 不污染系统默认的 `/root/.codex`
 
