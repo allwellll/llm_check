@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LLM LeetCode Benchmark</title>
+    <style>
+      :root {
+        --bg: #f4efe6;
+        --card: rgba(255, 252, 247, 0.92);
+        --line: rgba(64, 44, 24, 0.18);
+        --text: #2f2418;
+        --muted: #6b5c4e;
+        --accent: #b44f2a;
+        --accent-dark: #7f2e13;
+        --ok: #1f7a4f;
+        --shadow: 0 20px 60px rgba(78, 49, 22, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(219, 142, 76, 0.34), transparent 30%),
+          radial-gradient(circle at bottom right, rgba(154, 88, 57, 0.18), transparent 35%),
+          linear-gradient(135deg, #f5ecde 0%, #efe2cf 100%);
+        min-height: 100vh;
+      }
+
+      .shell {
+        width: min(960px, calc(100% - 32px));
+        margin: 36px auto;
+      }
+
+      .hero {
+        padding: 28px;
+        border: 1px solid var(--line);
+        background: var(--card);
+        box-shadow: var(--shadow);
+        border-radius: 24px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: clamp(2rem, 4vw, 3.4rem);
+        line-height: 0.95;
+        letter-spacing: -0.04em;
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 1rem;
+        line-height: 1.6;
+      }
+
+      form {
+        margin-top: 22px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      label {
+        display: block;
+        font-size: 0.9rem;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+
+      .field,
+      textarea,
+      select,
+      input {
+        width: 100%;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.72);
+        border-radius: 14px;
+        padding: 12px 14px;
+        font-size: 1rem;
+        color: var(--text);
+        outline: none;
+      }
+
+      textarea {
+        min-height: 120px;
+        resize: vertical;
+      }
+
+      input:focus,
+      textarea:focus,
+      select:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(180, 79, 42, 0.12);
+      }
+
+      .full {
+        grid-column: 1 / -1;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      button {
+        border: 0;
+        border-radius: 999px;
+        padding: 14px 22px;
+        background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
+        color: #fff7f1;
+        font-size: 1rem;
+        cursor: pointer;
+      }
+
+      .note {
+        margin-top: 14px;
+        font-size: 0.92rem;
+        color: var(--muted);
+      }
+
+      .status {
+        margin-top: 14px;
+        color: var(--ok);
+        min-height: 24px;
+      }
+
+      .guide {
+        margin-top: 22px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(255, 248, 240, 0.72);
+      }
+
+      .guide h2 {
+        margin: 0 0 10px;
+        font-size: 1.2rem;
+      }
+
+      .guide ol {
+        margin: 0;
+        padding-left: 20px;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      .guide li + li {
+        margin-top: 6px;
+      }
+
+      .guide code {
+        color: var(--text);
+      }
+
+      .guide img {
+        display: block;
+        width: 100%;
+        margin-top: 14px;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow);
+      }
+
+      @media (max-width: 720px) {
+        form,
+        .row {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <h1>LLM LeetCode Benchmark</h1>
+        <p>输入模型配置和 LeetCode Cookie，服务会在本机通过 <code>leetcode-cli</code> 依次执行题目、提交结果，并统计整体通过率。</p>
+
+        <form id="benchmark-form">
+          <div>
+            <label for="api_type">API 类型</label>
+            <select id="api_type" name="api_type">
+              <option value="responses">responses</option>
+              <option value="chat_completion">chat_completion</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="model_name">模型名</label>
+            <input id="model_name" name="model_name" placeholder="gpt-5.4" />
+          </div>
+
+          <div class="full">
+            <label for="api_url">API URL</label>
+            <input id="api_url" name="api_url" placeholder="https://api.example.com/v1" />
+          </div>
+
+          <div class="full">
+            <label for="api_key">API Key</label>
+            <input id="api_key" name="api_key" type="password" placeholder="sk-..." />
+          </div>
+
+          <div class="full">
+            <label for="problem_ids">题目 ID</label>
+            <input id="problem_ids" name="problem_ids" value="{{ default_problem_ids }}" />
+          </div>
+
+          <div>
+            <label for="language">LeetCode 语言</label>
+            <input id="language" name="language" value="python3" />
+          </div>
+
+          <div></div>
+
+          <div class="full">
+            <label for="csrf_token">csrftoken</label>
+            <textarea id="csrf_token" name="csrf_token" placeholder="只填 token，不带 csrftoken= 前缀"></textarea>
+          </div>
+
+          <div class="full">
+            <label for="session_token">LEETCODE_SESSION</label>
+            <textarea id="session_token" name="session_token" placeholder="只填 session 值，不带 LEETCODE_SESSION= 前缀"></textarea>
+          </div>
+
+          <div class="full">
+            <button type="submit">开始测试</button>
+          </div>
+        </form>
+
+        <p class="note">如果第一次运行机器上没有 Rust 和 <code>leetcode-cli</code>，服务会自动安装，首次任务会更慢。</p>
+        <div id="status" class="status"></div>
+
+        <section class="guide">
+          <h2>LeetCode Cookie 获取方法</h2>
+          <ol>
+            <li>先在浏览器登录 <code>https://leetcode.com/</code>。</li>
+            <li>打开开发者工具，进入 <code>Application</code> 或 <code>Storage</code> 页面。</li>
+            <li>在 <code>Cookies</code> 里找到 <code>https://leetcode.com</code>。</li>
+            <li>复制 <code>csrftoken</code> 和 <code>LEETCODE_SESSION</code> 的值。</li>
+            <li>这两个输入框也支持直接粘贴完整的 <code>csrftoken=...</code> 或 <code>LEETCODE_SESSION=...; Domain=...</code> 文本，服务会自动提取。</li>
+          </ol>
+          <img src="https://raw.githubusercontent.com/dijiatrustlight/Chart_bed/master/img/20260330151543.png" alt="LeetCode Cookie 获取示意图" />
+        </section>
+      </section>
+    </main>
+
+    <script>
+      const form = document.getElementById("benchmark-form");
+      const status = document.getElementById("status");
+
+      function payloadFromForm() {
+        const data = new FormData(form);
+        return {
+          api_type: data.get("api_type"),
+          api_url: data.get("api_url"),
+          api_key: data.get("api_key"),
+          model_name: data.get("model_name"),
+          problem_ids: data.get("problem_ids"),
+          language: data.get("language"),
+          csrf_token: data.get("csrf_token"),
+          session_token: data.get("session_token")
+        };
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        status.textContent = "任务已提交，正在创建运行记录...";
+        try {
+          const response = await fetch("/api/jobs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payloadFromForm())
+          });
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.detail || "提交失败");
+          }
+          window.location.href = data.job_url;
+        } catch (error) {
+          status.textContent = error.message || "提交失败";
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Benchmark Job {{ job.job_id }}</title>
+    <style>
+      :root {
+        --bg: #13161b;
+        --panel: #181d23;
+        --line: rgba(255, 255, 255, 0.08);
+        --text: #eef2f6;
+        --muted: #8da0b3;
+        --accent: #ff8b5d;
+        --ok: #5fdd9d;
+        --err: #ff7b7b;
+        --warn: #ffc857;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: Menlo, Monaco, Consolas, monospace;
+        background:
+          radial-gradient(circle at top right, rgba(255, 139, 93, 0.16), transparent 32%),
+          linear-gradient(180deg, #13161b 0%, #0c0f13 100%);
+        color: var(--text);
+      }
+
+      .wrap {
+        width: min(1120px, calc(100% - 24px));
+        margin: 24px auto;
+      }
+
+      .panel {
+        background: rgba(24, 29, 35, 0.92);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 18px;
+        margin-bottom: 16px;
+      }
+
+      h1, h2 {
+        margin: 0 0 12px;
+        font-size: 1.05rem;
+      }
+
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        color: var(--muted);
+      }
+
+      .summary {
+        font-size: 1.6rem;
+        color: var(--accent);
+      }
+
+      .results {
+        display: grid;
+        gap: 12px;
+      }
+
+      .result {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 14px;
+      }
+
+      .ok {
+        color: var(--ok);
+      }
+
+      .err {
+        color: var(--err);
+      }
+
+      .warn {
+        color: var(--warn);
+      }
+
+      pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 12px;
+        padding: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        overflow-x: auto;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <section class="panel">
+        <h1>任务 {{ job.job_id }}</h1>
+        <div class="meta">
+          <span>状态: <strong id="job-status">{{ job.status }}</strong></span>
+          <span>创建时间: <span id="job-created">{{ "%.0f"|format(job.created_at) }}</span></span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>总览</h2>
+        <div id="summary" class="summary">等待任务启动...</div>
+        <div id="job-error" class="err"></div>
+      </section>
+
+      <section class="panel">
+        <h2>逐题结果</h2>
+        <div id="results" class="results"></div>
+      </section>
+
+      <section class="panel">
+        <h2>执行日志</h2>
+        <pre id="logs">等待日志...</pre>
+      </section>
+    </main>
+
+    <script>
+      const jobId = "{{ job.job_id }}";
+
+      function escapeHtml(value) {
+        return (value || "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;");
+      }
+
+      function renderResult(item) {
+        const statusClass = item.submit_passed ? "ok" : (item.status === "error" ? "err" : "warn");
+        const title = item.problem_name ? `${item.problem_id} · ${item.problem_name}` : `${item.problem_id}`;
+        return `
+          <article class="result">
+            <div class="${statusClass}">${escapeHtml(title)} | ${escapeHtml(item.status)}</div>
+            <div class="muted">样例测试: ${item.sample_passed ? "通过" : "未通过"} | 提交: ${item.submit_passed ? "通过" : "未通过"}</div>
+            <div class="muted">Runtime: ${escapeHtml(item.runtime || "-")} | Memory: ${escapeHtml(item.memory || "-")}</div>
+            ${item.error ? `<pre>${escapeHtml(item.error)}</pre>` : ""}
+            ${item.sample_output ? `<pre>${escapeHtml(item.sample_output)}</pre>` : ""}
+            ${item.submit_output ? `<pre>${escapeHtml(item.submit_output)}</pre>` : ""}
+          </article>
+        `;
+      }
+
+      async function refresh() {
+        const response = await fetch(`/api/jobs/${jobId}`);
+        const data = await response.json();
+
+        document.getElementById("job-status").textContent = data.status;
+        document.getElementById("job-error").textContent = data.error || "";
+
+        if (data.summary && data.summary.total) {
+          document.getElementById("summary").textContent =
+            `${data.summary.passed}/${data.summary.total} 通过，整体通过率 ${data.summary.pass_rate}%`;
+        } else {
+          document.getElementById("summary").textContent = "任务执行中...";
+        }
+
+        document.getElementById("results").innerHTML =
+          (data.results || []).map(renderResult).join("") || "<div class='muted'>暂无结果</div>";
+        document.getElementById("logs").textContent =
+          (data.logs || []).join("\n") || "暂无日志";
+
+        if (data.status !== "finished" && data.status !== "error") {
+          window.setTimeout(refresh, 2000);
+        }
+      }
+
+      refresh();
+    </script>
+  </body>
+</html>
