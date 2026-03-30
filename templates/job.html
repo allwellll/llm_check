@@ -133,6 +133,10 @@
           <span>状态: <strong id="job-status">{{ job.status }}</strong></span>
           <span>创建时间: <span id="job-created">{{ "%.0f"|format(job.created_at) }}</span></span>
         </div>
+        <div class="step">
+          <div>API URL: <span id="job-api-url">{{ job.api_url or "-" }}</span></div>
+          <div>Model: <span id="job-model-name">{{ job.model_name or "-" }}</span></div>
+        </div>
       </section>
 
       <section class="panel">
@@ -230,6 +234,8 @@
         const data = await response.json();
 
         document.getElementById("job-status").textContent = data.status;
+        document.getElementById("job-api-url").textContent = data.api_url || "-";
+        document.getElementById("job-model-name").textContent = data.model_name || "-";
         document.getElementById("job-error").textContent = data.error || "";
         document.getElementById("step").textContent = formatStep(data);
         document.getElementById("reasoning-problem").textContent =

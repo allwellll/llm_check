@@ -56,6 +56,8 @@ class JobState:
     status: str = "queued"
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
+    api_url: str = ""
+    model_name: str = ""
     logs: list[str] = field(default_factory=list)
     results: list[ProblemResult] = field(default_factory=list)
     summary: dict[str, Any] = field(default_factory=dict)
@@ -113,6 +115,27 @@ def clip_text(value: str, limit: int = 3000) -> str:
     if len(value) <= limit:
         return value
     return value[:limit] + "\n...<truncated>..."
+
+
+def cleanup_old_job_runtime_dirs(
+    jobs_root: Path,
+    *,
+    keep_limit: int = 20,
+    delete_count: int = 15,
+) -> list[str]:
+    if not jobs_root.exists():
+        return []
+
+    job_dirs = [item for item in jobs_root.iterdir() if item.is_dir()]
+    if len(job_dirs) <= keep_limit:
+        return []
+
+    stale_dirs = sorted(job_dirs, key=lambda item: item.stat().st_mtime)[:delete_count]
+    removed: list[str] = []
+    for item in stale_dirs:
+        shutil.rmtree(item, ignore_errors=True)
+        removed.append(item.name)
+    return removed
 
 
 def set_job(job: JobState) -> None:
@@ -1108,12 +1131,16 @@ def run_benchmark_job(job: JobState, payload: dict[str, Any]) -> None:
     job.status = "running"
     job.set_step("准备启动任务")
     job.updated_at = time.time()
+    job_root = BASE_DIR / "runtime" / "jobs" / job.job_id
+    home = job_root / "home"
 
     try:
         api_type = normalize_api_type(payload["api_type"])
         api_url = payload["api_url"].strip()
         api_key = payload["api_key"].strip()
         model_name = payload["model_name"].strip()
+        job.api_url = api_url
+        job.model_name = model_name
         csrf_token = extract_cookie_value(payload["csrf_token"], "csrftoken")
         session_token = extract_cookie_value(payload["session_token"], "LEETCODE_SESSION")
         raw_problem_ids = payload.get("problem_ids", "")
@@ -1128,11 +1155,17 @@ def run_benchmark_job(job: JobState, payload: dict[str, Any]) -> None:
             if item.strip()
         ] or DEFAULT_PROBLEMS
 
+        job.log(f"API URL: {api_url}")
+        job.log(f"Model: {model_name}")
         job.log("检查 leetcode-cli 环境。")
         job.set_step("检查 leetcode-cli 环境")
         ensure_leetcode_cli_installed(job)
 
-        home = BASE_DIR / "runtime" / "jobs" / job.job_id / "home"
+        jobs_root = BASE_DIR / "runtime" / "jobs"
+        removed_dirs = cleanup_old_job_runtime_dirs(jobs_root)
+        if removed_dirs:
+            job.log(f"启动前清理旧任务目录 {len(removed_dirs)} 个。")
+
         if home.exists():
             shutil.rmtree(home)
         home.mkdir(parents=True, exist_ok=True)
@@ -1189,6 +1222,9 @@ def run_benchmark_job(job: JobState, payload: dict[str, Any]) -> None:
         job.set_step("任务失败")
         job.log(f"任务失败: {exc}")
     finally:
+        if job_root.exists():
+            shutil.rmtree(job_root, ignore_errors=True)
+            job.log("任务运行目录已清理。")
         job.updated_at = time.time()
 
 
@@ -1209,7 +1245,11 @@ async def create_job(request: Request) -> JSONResponse:
         raise HTTPException(status_code=400, detail="api_type 仅支持 chat_completion 或 codex")
     payload["api_type"] = api_type
 
-    job = JobState(job_id=uuid.uuid4().hex[:12])
+    job = JobState(
+        job_id=uuid.uuid4().hex[:12],
+        api_url=(payload.get("api_url") or "").strip(),
+        model_name=(payload.get("model_name") or "").strip(),
+    )
     set_job(job)
     thread = threading.Thread(target=run_benchmark_job, args=(job, payload), daemon=True)
     thread.start()
