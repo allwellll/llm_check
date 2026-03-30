@@ -30,6 +30,7 @@ uvicorn app:app --host 0.0.0.0 --port 1024
 - 支持的模型接口类型：
   - `chat_completion`
   - `codex`
+- `leetcode-cli` 使用的是 `https://github.com/clearloop/leetcode-cli`
 - `codex` 类型默认通过 `codex exec` 调用模型，不直接在服务内手写 `POST /responses`
 - `chat_completion` 类型仍然使用普通 HTTP 请求
 - 模型请求默认使用 `thinking effort = high`
