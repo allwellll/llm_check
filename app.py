@@ -21,7 +21,7 @@ from fastapi.templating import Jinja2Templates
 
 BASE_DIR = Path(__file__).resolve().parent
 TEMPLATES = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-DEFAULT_PROBLEMS = [3757, 3661, 3563]
+DEFAULT_PROBLEMS = [3743, 3501, 3486, 3435, 3389]
 LEETCODE_CLI_VERSION = "0.4.3"
 DEFAULT_THINKING_EFFORT = "high"
 MODEL_CONNECT_TIMEOUT = 10
@@ -604,6 +604,9 @@ def seed_temp_codex_home(temp_home: Path) -> Path:
 def build_temp_codex_config(base_text: str, api_url: str, model: str, project_dir: Path) -> str:
     filtered_lines: list[str] = []
     skip_provider_block = False
+    in_features_block = False
+    features_block_seen = False
+    fast_mode_injected = False
 
     for line in base_text.splitlines():
         stripped = line.strip()
@@ -618,7 +621,22 @@ def build_temp_codex_config(base_text: str, api_url: str, model: str, project_di
             else:
                 continue
 
+        if stripped == "[features]":
+            features_block_seen = True
+            in_features_block = True
+            filtered_lines.append(line)
+            if not fast_mode_injected:
+                filtered_lines.append("fast_mode = true")
+                fast_mode_injected = True
+            continue
+
+        if in_features_block and stripped.startswith("[") and stripped.endswith("]"):
+            in_features_block = False
+
         if re.match(r"^(model_provider|model|model_reasoning_effort|openai_base_url)\s*=", stripped):
+            continue
+
+        if in_features_block and re.match(r"^fast_mode\s*=", stripped):
             continue
 
         filtered_lines.append(line)
@@ -635,6 +653,14 @@ def build_temp_codex_config(base_text: str, api_url: str, model: str, project_di
             f'model_reasoning_effort = "{DEFAULT_THINKING_EFFORT}"',
         ]
     )
+    feature_block = ""
+    if not features_block_seen:
+        feature_block = "\n".join(
+            [
+                "[features]",
+                "fast_mode = true",
+            ]
+        )
     provider_block = "\n".join(
         [
             "[model_providers.llm_check_temp]",
@@ -651,6 +677,8 @@ def build_temp_codex_config(base_text: str, api_url: str, model: str, project_di
     parts = [prefix]
     if filtered_text:
         parts.append(filtered_text)
+    if feature_block:
+        parts.append(feature_block)
     parts.append(provider_block)
     return "\n\n".join(parts) + "\n"
 
